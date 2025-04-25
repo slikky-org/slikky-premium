@@ -1,10 +1,9 @@
 import streamlit as st
-from dotenv import load_dotenv
-import os
-from openai import OpenAI
+import openai
 import locale
 from io import BytesIO
 import datetime
+
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
@@ -14,14 +13,16 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Image
 from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.styles import ParagraphStyle
 
+# Zet de Nederlandse tijdnotatie
 try:
     locale.setlocale(locale.LC_TIME, 'nl_NL.UTF-8')
 except locale.Error:
     locale.setlocale(locale.LC_TIME, '')
 
-load_dotenv()
-openai_api_key = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=openai_api_key)
+# ✅ Zet de OpenAI API key via Streamlit secrets
+#openai.api_key = st.secrets["openai"]["api_key"]
+
+
 
 if st.session_state.get("reset", False):
     st.session_state.update({
@@ -170,6 +171,7 @@ if st.button("🎯 Genereer Voedingsprogramma"):
     elif onder_toezicht_optie == "Ja" and hulp_bij_eten_optie not in ["Ja", "Nee"]:
         st.warning("⚠️ Kies of de cliënt geholpen moet worden met eten.")
     else:
+        st.success("✅ Alles correct ingevuld. Hier komt je advies...")
         toezicht_tekst = "De cliënt moet eten onder toezicht." if onder_toezicht_optie == "Ja" else ""
         hulp_tekst = "De cliënt moet geholpen worden met eten." if hulp_bij_eten_optie == "Ja" else ""
         advies_datum = st.session_state["advies_datum"]
@@ -209,6 +211,7 @@ Leg kort uit hoe je dit advies hebt vertaald naar een aangepast voedingsplan.
 """
 
         try:
+            client = openai.OpenAI(api_key=st.secrets["openai"]["api_key"])
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
