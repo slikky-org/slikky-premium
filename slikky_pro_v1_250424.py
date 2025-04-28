@@ -1,8 +1,14 @@
 import streamlit as st
+from dotenv import load_dotenv
+import os
 import openai
 import locale
 from io import BytesIO
 import datetime
+
+load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
 
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
@@ -21,7 +27,7 @@ except locale.Error:
 
 # ✅ Zet de OpenAI API key via Streamlit secrets
 #openai.api_key = st.secrets["openai"]["api_key"]
-
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 
 if st.session_state.get("reset", False):
@@ -211,7 +217,7 @@ Leg kort uit hoe je dit advies hebt vertaald naar een aangepast voedingsplan.
 """
 
         try:
-            client = openai.OpenAI(api_key=st.secrets["openai"]["api_key"])
+            client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
