@@ -1,13 +1,45 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import streamlit as st
 from dotenv import load_dotenv
-import os
+load_dotenv()
+
 import openai
 import locale
 from io import BytesIO
 import datetime
 
-load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    project=os.getenv("OPENAI_PROJECT_ID")
+)
+
+
+
+
+def tel_gebruik():
+    bestand = 'slikky_log.csv'
+    bestaat = os.path.isfile(bestand)
+    tijdstip = datetime.datetime.now().strftime("%Y-%m-%d,%H:%M:%S")
+
+    if bestaat:
+        with open(bestand, 'r') as file:
+            regels = file.readlines()
+            gebruik_id = len(regels)
+    else:
+        gebruik_id = 1
+
+    with open(bestand, 'a') as file:
+        if not bestaat:
+            file.write('Datum,Tijd,Gebruik_ID,Advies_Type\n')  # header
+        file.write(f"{tijdstip.split(',')[0]},{tijdstip.split(',')[1]},{gebruik_id},Premium\n")
+
+
 
 
 from reportlab.lib.pagesizes import A4
@@ -27,9 +59,6 @@ except locale.Error:
 
 # ✅ Zet de OpenAI API key via Streamlit secrets
 #openai.api_key = st.secrets["openai"]["api_key"]
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
-
 if st.session_state.get("reset", False):
     st.session_state.update({
         "gender": "Dhr.",
@@ -50,7 +79,7 @@ if st.session_state.get("reset", False):
     })
     st.rerun()
 
-st.image("logo_slikky.png", width=150)
+st.image("images/logo_slikky.png", width=150)
 st.markdown("### Voedingsadvies bij slikproblemen")
 st.write("Voer het logopedisch advies in, geef IDDSI-niveaus en specifieke voorkeuren op.")
 
@@ -120,6 +149,16 @@ iddsi_vloeibaar = st.selectbox("🥣 Niveau voor vloeistof:", [
 allergieën = st.text_input("⚠️ Allergieën (optioneel, scheid met komma's):", key="allergie")
 voorkeuren = st.text_input("✅ Voedselvoorkeuren (optioneel, scheid met komma's):", key="voorkeuren")
 
+# --- Validatie op overlap tussen allergieën en voorkeuren ---
+if allergieën.strip() and voorkeuren.strip():  # alleen controleren als beide velden niet leeg zijn
+    allergie_lijst = [a.strip().lower() for a in allergieën.split(',')]
+    voorkeur_lijst = [v.strip().lower() for v in voorkeuren.split(',')]
+    overlap = set(allergie_lijst) & set(voorkeur_lijst)
+    if overlap:
+        overlappende_term = ', '.join(overlap)
+        st.error(f"⚠️ Let op: het volgende komt zowel voor bij allergieën als bij voorkeuren: {overlappende_term}. Pas je invoer aan.")
+        st.stop()
+
 st.write("### 🔍 Voedingsmiddelenfilter (optioneel)")
 
 # Groep 1: Allergieën & intoleranties
@@ -130,21 +169,23 @@ uitsluitingen = []
 if toon_allergie_filter:
     col1, col2, col3 = st.columns(3)
     with col1:
+        if st.checkbox("Amandelen"): uitsluitingen.append("amandelen")
         if st.checkbox("Gluten"): uitsluitingen.append("gluten")
-        if st.checkbox("Lactose"): uitsluitingen.append("lactose")
         if st.checkbox("Koemelk"): uitsluitingen.append("koemelk")
         if st.checkbox("Kippenei"): uitsluitingen.append("kippenei")
+        if st.checkbox("Lactose"): uitsluitingen.append("lactose")
     with col2:
+        if st.checkbox("Lupine"): uitsluitingen.append("lupine")
+        if st.checkbox("Mosterd"): uitsluitingen.append("mosterd")
         if st.checkbox("Noten"): uitsluitingen.append("noten")
         if st.checkbox("Pinda’s"): uitsluitingen.append("pinda’s")
-        if st.checkbox("Soja"): uitsluitingen.append("soja")
-        if st.checkbox("Tarwe"): uitsluitingen.append("tarwe")
-    with col3:
-        if st.checkbox("Vis"): uitsluitingen.append("vis")
         if st.checkbox("Schaal-/schelpdieren"): uitsluitingen.append("schaal-/schelpdieren")
+    with col3:
         if st.checkbox("Sesamzaad"): uitsluitingen.append("sesamzaad")
-        if st.checkbox("Lupine"): uitsluitingen.append("lupine")
+        if st.checkbox("Soja"): uitsluitingen.append("soja")
         if st.checkbox("Sulfiet"): uitsluitingen.append("sulfiet")
+        if st.checkbox("Tarwe"): uitsluitingen.append("tarwe")
+        if st.checkbox("Vis"): uitsluitingen.append("vis")
 
 # Groep 2: Dieet-/levensstijl gerelateerd
 toon_dieet_filter = st.checkbox("Sluit de volgende *dieet- of levensstijlgerelateerde* voedingsmiddelen uit:")
@@ -152,20 +193,59 @@ toon_dieet_filter = st.checkbox("Sluit de volgende *dieet- of levensstijlgerelat
 if toon_dieet_filter:
     col4, col5, col6 = st.columns(3)
     with col4:
-        if st.checkbox("Varkensvlees"): uitsluitingen.append("varkensvlees")
-        if st.checkbox("Rauw voedsel"): uitsluitingen.append("rauw voedsel")
-    with col5:
-        if st.checkbox("Suiker"): uitsluitingen.append("suiker")
-        if st.checkbox("Zout / natrium"): uitsluitingen.append("zout/natrium")
-    with col6:
-        if st.checkbox("Vegetarisch"): uitsluitingen.append("vegetarisch")
-        if st.checkbox("Veganistisch"): uitsluitingen.append("veganistisch")
+        if st.checkbox("Alcohol"): uitsluitingen.append("alcohol")
         if st.checkbox("E-nummers"): uitsluitingen.append("E-nummers")
+        if st.checkbox("Kunstmatige zoetstoffen"): uitsluitingen.append("kunstmatige zoetstoffen")
+    with col5:
+        if st.checkbox("Rauw voedsel"): uitsluitingen.append("rauw voedsel")
+        if st.checkbox("Suiker"): uitsluitingen.append("suiker")
+        if st.checkbox("Vegetarisch"): uitsluitingen.append("vegetarisch")
+    with col6:
+        if st.checkbox("Veganistisch"): uitsluitingen.append("veganistisch")
+        if st.checkbox("Varkensvlees"): uitsluitingen.append("varkensvlees")
+        if st.checkbox("Zout / natrium"): uitsluitingen.append("zout/natrium")
         anders = st.text_input("Anders, namelijk:")
         if anders:
             uitsluitingen.append(anders)
 
 uitsluit_tekst = ", ".join(uitsluitingen) if uitsluitingen else "Geen extra uitsluitingen opgegeven."
+# === Toon gekozen uitsluitingen in 3 kolommen, volledig alfabetisch ===
+if uitsluitingen:
+    uitsluitingen = sorted(uitsluitingen, key=lambda x: x.lower())  # Volledig alfabetisch sorteren
+    kolom_lengte = (len(uitsluitingen) + 2) // 3
+
+    kolom1 = uitsluitingen[:kolom_lengte]
+    kolom2 = uitsluitingen[kolom_lengte:2*kolom_lengte]
+    kolom3 = uitsluitingen[2*kolom_lengte:]
+
+    def maak_lijst(kolom):
+        if kolom:
+            return "<ul>" + "".join(f"<li>{item.capitalize()}</li>" for item in kolom) + "</ul>"
+        else:
+            return ""
+
+    st.markdown(
+        f"""
+        <div style="background-color: #e6f4ea; padding: 20px; border-radius: 10px;
+                    animation: fadeIn 0.5s ease-in;">
+            <h4 style="color: #1a7f37;">Geselecteerde uitsluitingen:</h4>
+            <div style="display: flex;">
+                <div style="flex: 1;">{maak_lijst(kolom1)}</div>
+                <div style="flex: 1;">{maak_lijst(kolom2)}</div>
+                <div style="flex: 1;">{maak_lijst(kolom3)}</div>
+            </div>
+        </div>
+        <style>
+        @keyframes fadeIn {{
+            0% {{ opacity: 0; }}
+            100% {{ opacity: 1; }}
+        }}
+        </style>
+        <div style="margin-bottom: 30px;"></div>
+        """,
+        unsafe_allow_html=True
+    )
+
 
 # === Alleen als de knop is ingedrukt, voer de rest uit ===
 if st.button("🎯 Genereer Voedingsprogramma"):
@@ -184,36 +264,64 @@ if st.button("🎯 Genereer Voedingsprogramma"):
         geldigheid_tekst = geldigheid_datum.strftime('%d/%m/%Y') if geldigheid_datum else f"{geldigheid_optie} vanaf {advies_datum.strftime('%d/%m/%Y')}"
         uitsluit_tekst = ", ".join(uitsluitingen) if uitsluitingen else "Geen extra uitsluitingen opgegeven."
 
-        prompt = f"""
-Je bent een AI-diëtist die voedingsprogramma's opstelt op basis van logopedisch advies.
+        golden_prompt = f"""Je bent een AI-diëtist die voedingsprogramma's opstelt op basis van logopedisch advies. Je houdt strikt rekening met de vermelde IDDSI-niveaus, allergieën, voorkeuren en eventuele voedselbeperkingen.
 
 Toon deze regels vetgedrukt bovenaan het advies:
-**Dit voedingsadvies is bedoeld voor {client_gender} {client_naam} ({client_geboortedatum.strftime('%d/%m/%Y')}).**
+**Dit voedingsadvies is bedoeld voor {client_gender} {client_naam} ({client_geboortedatum}).**
 **Geldig tot: {geldigheid_tekst}**
 **Zorgorganisatie: {zorgorganisatie} | Locatie: {locatie}**
 **Aangemaakt door: {aangemaakt_door} ({functie})**
 
 **1. Logopedisch advies**  
-Herhaal het advies dat is ingevoerd.
+Herhaal beknopt het ingevoerde advies.
 
 **2. Vertaling naar voedingsplan**  
-Leg kort uit hoe je dit advies hebt vertaald naar een aangepast voedingsplan.
+Leg in 2-4 zinnen uit hoe je dit advies vertaalt naar een passend voedingsplan op basis van IDDSI.
 
 **3. Belangrijke gegevens**  
 - IDDSI niveau voedsel: {iddsi_vast}  
 - IDDSI niveau vloeistof: {iddsi_vloeibaar}  
-- Logopedisch advies: {advies}  
+- Uitsluitingen: {uitsluit_tekst}  
 - Allergieën: {allergieën}  
-- Voedselvoorkeuren: {voorkeuren}  
-- Uitsluitingen op basis van voedingsfilter: {uitsluit_tekst}  
+- Voorkeuren: {voorkeuren}  
 - {toezicht_tekst}  
 - {hulp_tekst}
 
 **4. Concreet voedingsprogramma**  
-- Geef maximaal 3 aanbevolen voedingsmiddelen per categorie (bijv. vast en vloeibaar)  
-- Benoem maximaal 3 voedingsmiddelen die moeten worden vermeden  
-- Geef een voorbeeld dagmenu (ontbijt, lunch, diner, tussendoor)  
-- Geef maximaal 5 alternatieven bij voorkeuren of allergieën
+- Geef exact 3 tot 5 aanbevolen voedingsmiddelen per categorie. Noem er nooit meer dan 5:  
+  - *Vast voedsel*: bijvoorbeeld aardappel, vlees, groenten  
+  - *Vloeibaar voedsel*: bijvoorbeeld soep, vla, dranken  
+- Geef maximaal 5 voedingsmiddelen die moeten worden vermeden, met toelichting (bv. "ivm allergie" of "ivm verhoogde slikrisico’s")  
+- Geef een realistisch voorbeeld dagmenu (ontbijt, lunch, diner, tussendoor), met 1 voorstel per maaltijdmoment, afgestemd op het IDDSI-niveau  
+- Geef maximaal 5 alternatieven op basis van opgegeven voorkeuren of allergieën
+
+Je doel is om veilige, praktische en gevarieerde suggesties te geven die volledig voldoen aan de opgegeven IDDSI-niveaus voor vast en vloeibaar voedsel.
+
+Belangrijke instructies:
+- Houd je strikt aan bestaande, veilige voedingsmiddelen die passen bij het opgegeven IDDSI-niveau.
+- Structureer je antwoord altijd in twee secties: één voor vast voedsel, één voor vloeibaar voedsel.
+- Geef per sectie maximaal 5 duidelijke suggesties in korte, heldere bulletpoints.
+- Zorg dat de suggesties gevarieerd, realistisch en haalbaar zijn (geen exotische of moeilijk verkrijgbare producten).
+- Als er allergieën zijn opgegeven (zoals noten, gluten of koemelk), **moet je strikt alle voedingsmiddelen uitsluiten die deze stoffen bevatten of kunnen bevatten**.  
+  Bijvoorbeeld:  
+  - Bij **koemelkallergie**: géén melk, yoghurt, vla, boter, kaas, roomijs of andere zuivelproducten.  
+  - Bij **notenallergie**: géén pindakaas, notenpasta’s of producten met hazelnoot, amandel of walnoot.  
+  Geef uitsluitend **volwaardige en veilige alternatieven** die géén sporen bevatten van het opgegeven allergeen.  
+  Vermijd twijfelgevallen of samengestelde producten waarvan de samenstelling niet zeker is.
+- Bied bij elke allergie of intolerantie minimaal twee geschikte alternatieve voedingsopties aan.
+- Vermijd dubbele of herhaalde adviezen binnen dezelfde sectie.
+- Als hetzelfde voedingsmiddel zowel als *allergie* als als *voorkeur* is opgegeven, meld dan:
+  *Let op: het opgegeven voedingsmiddel staat zowel bij allergieën als bij voorkeuren. Wijzig de invoer om verder te gaan.*
+  Geef in dat geval géén voedingsadvies.
+- Sluit het advies af met een korte, vriendelijke en bemoedigende zin voor het zorgteam.
+- Geef daaronder **altijd** als laatste regel, losstaand onderaan het document:  
+  *Bij twijfel over veiligheid of toepassing: raadpleeg een logopedist of diëtist.*
+
+Focuspunten:
+- Veiligheid, toepasbaarheid en duidelijkheid zijn belangrijker dan creativiteit.
+- Schrijf beknopt en begrijpelijk, afgestemd op gebruik door zorgprofessionals en het cliëntdossier.
+- Houd je strikt aan de gevraagde aantallen. Laat geen extra opties of herhalingen zien buiten de genoemde limieten.
+- Antwoord altijd in de Nederlandse taal.
 """
 
         try:
@@ -222,7 +330,7 @@ Leg kort uit hoe je dit advies hebt vertaald naar een aangepast voedingsplan.
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": "Je bent een AI gespecialiseerd in voedingsadvies voor cliënten met slikproblemen."},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": golden_prompt}
                 ]
             )
             advies_output = response.choices[0].message.content
@@ -254,7 +362,7 @@ Leg kort uit hoe je dit advies hebt vertaald naar een aangepast voedingsplan.
                 styles.add(ParagraphStyle(name='BoldBody', fontSize=11, leading=16, alignment=TA_LEFT, fontName='Helvetica-Bold'))
 
                 try:
-                    logo = Image("logo_slikky.png", width=3.5*cm, height=3.5*cm)
+                    logo = Image("images/logo_slikky.png", width=3.5*cm, height=1*cm)
                     elements.append(logo)
                 except Exception as e:
                     elements.append(Paragraph("⚠️ Logo niet gevonden: " + str(e), styles['Body']))
@@ -289,7 +397,7 @@ Leg kort uit hoe je dit advies hebt vertaald naar een aangepast voedingsplan.
                 elements.append(Spacer(1, 40))
 
                 try:
-                    merkbadge = Image("logo_slikky.png", width=5.0*cm, height=5.0*cm)
+                    merkbadge = Image("images/logo_slikky.png", width=3.5*cm, height=1*cm)
                     merkbadge.hAlign = 'CENTER'
                     elements.append(merkbadge)
                 except Exception as e:
@@ -307,10 +415,12 @@ Leg kort uit hoe je dit advies hebt vertaald naar een aangepast voedingsplan.
                 pdf.build(elements, onFirstPage=header_footer, onLaterPages=header_footer)
                 buffer.seek(0)
 
+                tel_gebruik()
+
                 st.download_button(
                     label="💾 Opslaan als PDF",
                     data=buffer,
-                    file_name=f"voedingsadvies_{client_naam.replace(' ', '')}{client_geboortedatum.strftime('%d%m%Y')}.pdf",
+                    file_name=f"Slikky_voedingsadvies_{client_naam.strip().replace(' ', '_')}_{client_geboortedatum.strftime('%d-%m-%Y')}.pdf",
                     mime="application/pdf"
                 )
 
@@ -325,3 +435,9 @@ Leg kort uit hoe je dit advies hebt vertaald naar een aangepast voedingsplan.
 if st.button("🔁 Herstel alle velden"):
     st.session_state["reset"] = True
     st.rerun()
+    
+def footer():
+    st.markdown("---")
+    st.markdown("<sub><i>SLIKKY® Premium v2025.05.2</i></sub>", unsafe_allow_html=True)
+
+footer()

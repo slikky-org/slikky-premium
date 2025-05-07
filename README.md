@@ -2,7 +2,7 @@
 
 **SLIKKY® Premium** is de geavanceerde versie van SLIKKY® — een AI-ondersteunde webapp voor zorgprofessionals die snel en veilig voedingsadviezen willen opstellen volgens IDDSI-niveaus.
 
-## 💡 Features
+## ⚙️ Functionaliteit
 
 - Logopedisch advies automatisch vertaald naar een voedingsplan
 - IDDSI-integratie voor zowel vast als vloeibaar voedsel
