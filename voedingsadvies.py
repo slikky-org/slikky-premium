@@ -15,10 +15,10 @@ import mysql.connector
 from openai import OpenAI
 
 # Vul je eigen lokale db-gegevens in
-DB_HOST = "db4free.net"
+DB_HOST = "127.0.0.1"
 DB_PORT = 3306
-DB_NAME = "slikkytest"
-DB_USER = "slikkyuser"
+DB_NAME = "premium"
+DB_USER = "premium"
 DB_PASSWORD = "Q3Y#ybA2X*2.nBr"
 
 def check_login(email, wachtwoord):
