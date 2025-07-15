@@ -23,26 +23,46 @@ DB_USER = os.environ.get("EXTERNAL_DB_USER", "premium")
 DB_PASSWORD = os.environ.get("EXTERNAL_DB_PASS", "Q3Y#ybA2X*2.nBr")
 
 def check_login(email, wachtwoord):
-    conn = mysql.connector.connect(
-        host=DB_HOST, port=DB_PORT, database=DB_NAME,
-        user=DB_USER, password=DB_PASSWORD
-    )
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM users WHERE email=%s LIMIT 1", (email,))
-    user_row = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    if user_row and 'wachtwoord' in user_row:
-        hash_from_db = user_row['wachtwoord']
-        if hash_from_db.startswith('$2'):
-            # Convert $2y$ to $2b$ for Python bcrypt compatibility
-            hash_for_bcrypt = hash_from_db.replace('$2y$', '$2b$')
-            try:
-                if bcrypt.checkpw(wachtwoord.encode('utf-8'), hash_for_bcrypt.encode('utf-8')):
-                    return user_row
-            except ValueError:
-                return None
-    return None
+    import time
+    try:
+        print("Connecting to DB...")
+        t0 = time.time()
+        conn = mysql.connector.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            database=DB_NAME,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            connection_timeout=5  # seconds
+        )
+        print("Connected in", time.time() - t0, "seconds")
+        cursor = conn.cursor(dictionary=True)
+        print("Running user query...")
+        cursor.execute("SELECT * FROM users WHERE email=%s LIMIT 1", (email,))
+        user_row = cursor.fetchone()
+        print("Query result:", user_row)
+        cursor.close()
+        conn.close()
+        if user_row and 'wachtwoord' in user_row:
+            hash_from_db = user_row['wachtwoord']
+            if hash_from_db.startswith('$2'):
+                hash_for_bcrypt = hash_from_db.replace('$2y$', '$2b$')
+                try:
+                    if bcrypt.checkpw(wachtwoord.encode('utf-8'), hash_for_bcrypt.encode('utf-8')):
+                        print("Password match!")
+                        return user_row
+                    else:
+                        print("Password does not match.")
+                except ValueError as ve:
+                    print("ValueError in bcrypt:", ve)
+                    return None
+        else:
+            print("No user found or wachtwoord missing.")
+        return None
+    except Exception as e:
+        print(f"Database error: {e}")
+        st.error(f"Database error: {e}")
+        return None
 
 # --- Streamlit login ---
 if "user" not in st.session_state:
