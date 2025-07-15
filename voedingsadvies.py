@@ -35,8 +35,10 @@ def check_login(email, wachtwoord):
     if user_row and 'wachtwoord' in user_row:
         hash_from_db = user_row['wachtwoord']
         if hash_from_db.startswith('$2'):
+            # Convert $2y$ to $2b$ for Python bcrypt compatibility
+            hash_for_bcrypt = hash_from_db.replace('$2y$', '$2b$')
             try:
-                if bcrypt.checkpw(wachtwoord.encode('utf-8'), hash_from_db.encode('utf-8')):
+                if bcrypt.checkpw(wachtwoord.encode('utf-8'), hash_for_bcrypt.encode('utf-8')):
                     return user_row
             except ValueError:
                 return None
