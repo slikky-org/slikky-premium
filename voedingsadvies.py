@@ -11,15 +11,16 @@ import locale
 from io import BytesIO
 import datetime
 import mysql.connector
+import bcrypt
 
 from openai import OpenAI
 
-# Vul je eigen lokale db-gegevens in
-DB_HOST = "127.0.0.1"
-DB_PORT = 3306
-DB_NAME = "premium"
-DB_USER = "premium"
-DB_PASSWORD = "Q3Y#ybA2X*2.nBr"
+# Use environment variables for DB credentials
+DB_HOST = os.environ.get("EXTERNAL_DB_HOST", "127.0.0.1")
+DB_PORT = int(os.environ.get("EXTERNAL_DB_PORT", 3306))
+DB_NAME = os.environ.get("EXTERNAL_DB_NAME", "premium")
+DB_USER = os.environ.get("EXTERNAL_DB_USER", "premium")
+DB_PASSWORD = os.environ.get("EXTERNAL_DB_PASS", "Q3Y#ybA2X*2.nBr")
 
 def check_login(email, wachtwoord):
     conn = mysql.connector.connect(
@@ -27,11 +28,17 @@ def check_login(email, wachtwoord):
         user=DB_USER, password=DB_PASSWORD
     )
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM users WHERE email=%s AND wachtwoord=%s", (email, wachtwoord))
-    user = cursor.fetchone()
+    # Query the encrypted password from the Gravity Forms compatible table
+    cursor.execute("SELECT encrypted_password FROM user_passwords WHERE email=%s ORDER BY created_at DESC LIMIT 1", (email,))
+    result = cursor.fetchone()
     cursor.close()
     conn.close()
-    return user
+    if result:
+        encrypted_password = result["encrypted_password"]
+        if bcrypt.checkpw(wachtwoord.encode("utf-8"), encrypted_password.encode("utf-8")):
+            # Optionally, fetch user info from another table if needed
+            return {"email": email, "rol": "premium"}  # Adjust as needed
+    return None
 
 # --- Streamlit login ---
 if "user" not in st.session_state:
@@ -233,7 +240,7 @@ aangemaakt_door = col_creator1.text_input("Aangemaakt door:", key="auteur")
 functie = col_creator2.text_input("Functie:", key="functie")
 
 # --- Rolafhankelijk: adviesveld en allergie/voorkeuren
-if user["rol"] == "premium":
+if user and user["rol"] == "premium":
     advies = st.text_area("📄 Logopedisch advies:", key="advies")
     onder_toezicht_optie = st.radio(
         "🚨 Moet de cliënt eten onder toezicht?",
@@ -306,7 +313,7 @@ if allergieën.strip() and voorkeuren.strip():
 
 # --- Filters rol-afhankelijk
 st.write("### 🔍 Voedingsmiddelenfilter (optioneel)")
-if user["rol"] == "premium":
+if user and user["rol"] == "premium":
     toon_allergie_filter = st.checkbox("Sluit de volgende *intoleranties of allergenen* uit:")
     uitsluitingen = []
     if toon_allergie_filter:
@@ -405,7 +412,7 @@ if st.button("🎯 Genereer Voedingsprogramma"):
     # --- Validatie afhankelijk van rol ---
     if not advies:
         st.warning("⚠️ Voer eerst een logopedisch advies in.")
-    elif user["rol"] == "premium":
+    elif user and user["rol"] == "premium":
         if onder_toezicht_optie not in ["Ja", "Nee"]:
             st.warning("⚠️ Kies of de cliënt onder toezicht moet eten.")
         elif onder_toezicht_optie == "Ja" and hulp_bij_eten_optie not in ["Ja", "Nee"]:
@@ -417,14 +424,14 @@ if st.button("🎯 Genereer Voedingsprogramma"):
 
     if 'proceed' in locals() and proceed:
         st.success("✅ Alles correct ingevuld. Hier komt je advies...")
-        toezicht_tekst = "De cliënt moet eten onder toezicht." if (user["rol"] == "premium" and onder_toezicht_optie == "Ja") else ""
-        hulp_tekst = "De cliënt moet geholpen worden met eten." if (user["rol"] == "premium" and hulp_bij_eten_optie == "Ja") else ""
+        toezicht_tekst = "De cliënt moet eten onder toezicht." if (user and user["rol"] == "premium" and onder_toezicht_optie == "Ja") else ""
+        hulp_tekst = "De cliënt moet geholpen worden met eten." if (user and user["rol"] == "premium" and hulp_bij_eten_optie == "Ja") else ""
         advies_datum = st.session_state["advies_datum"]
         geldigheid_tekst = geldigheid_datum.strftime('%d/%m/%Y') if geldigheid_datum else f"{geldigheid_optie} vanaf {advies_datum.strftime('%d/%m/%Y')}"
         uitsluit_tekst = ", ".join(uitsluitingen) if uitsluitingen else "Geen extra uitsluitingen opgegeven."
 
         # --- Rolafhankelijke prompt! ---
-        if user["rol"] == "premium":
+        if user and user["rol"] == "premium":
             golden_prompt = f"""Jouw PREMIUM prompt hier... (plak jouw premium prompt in dit blok)"""
         else:
             golden_prompt = f"""Je bent een AI-diëtist die voedingsprogramma's opstelt op basis van logopedisch advies.
@@ -492,12 +499,12 @@ Belangrijke instructies:
             advies_output = response.choices[0].message.content
 
             st.subheader("🚨 Belangrijke waarschuwing")
-            if user["rol"] == "premium" and onder_toezicht_optie == "Ja":
+            if user and user["rol"] == "premium" and onder_toezicht_optie == "Ja":
                 st.markdown(
                     '<div style="background-color:#ffcccc;padding:15px;border-radius:10px;color:#990000;font-weight:bold;">🚨 Deze persoon mag alleen eten onder toezicht!</div>',
                     unsafe_allow_html=True
                 )
-            if user["rol"] == "premium" and hulp_bij_eten_optie == "Ja":
+            if user and user["rol"] == "premium" and hulp_bij_eten_optie == "Ja":
                 st.markdown(
                     '<div style="background-color:#ffcccc;padding:15px;border-radius:10px;color:#990000;font-weight:bold;">⚠️ Deze persoon moet geholpen worden met eten!</div>',
                     unsafe_allow_html=True
@@ -507,7 +514,7 @@ Belangrijke instructies:
             st.markdown(advies_output)
 
             # --- PDF Export rol-afhankelijk ---
-            if user["rol"] == "premium":
+            if user and user["rol"] == "premium":
                 try:
                     buffer = BytesIO()
                     pdf = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
@@ -595,7 +602,7 @@ if st.button("🔁 Herstel alle velden"):
 
 def footer():
     st.markdown("---")
-    if user["rol"] == "premium":
+    if user and user["rol"] == "premium":
         st.markdown("<sub><i>SLIKKY® Premium v2025.07.1</i></sub>", unsafe_allow_html=True)
     else:
         st.markdown("<sub><i>SLIKKY® Basis v2025.07.1</i></sub>", unsafe_allow_html=True)
