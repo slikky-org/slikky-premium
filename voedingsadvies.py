@@ -28,15 +28,18 @@ def check_login(email, wachtwoord):
         user=DB_USER, password=DB_PASSWORD
     )
     cursor = conn.cursor(dictionary=True)
-    # Fetch the hash from the wachtwoord column in the users table
     cursor.execute("SELECT * FROM users WHERE email=%s LIMIT 1", (email,))
     user_row = cursor.fetchone()
     cursor.close()
     conn.close()
     if user_row and 'wachtwoord' in user_row:
         hash_from_db = user_row['wachtwoord']
-        if bcrypt.checkpw(wachtwoord.encode('utf-8'), hash_from_db.encode('utf-8')):
-            return user_row
+        if hash_from_db.startswith('$2'):
+            try:
+                if bcrypt.checkpw(wachtwoord.encode('utf-8'), hash_from_db.encode('utf-8')):
+                    return user_row
+            except ValueError:
+                return None
     return None
 
 # --- Streamlit login ---
