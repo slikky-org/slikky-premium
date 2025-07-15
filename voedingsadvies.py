@@ -18,15 +18,12 @@ from openai import OpenAI
 # Use environment variables for DB credentials
 DB_HOST = os.environ.get("EXTERNAL_DB_HOST", "127.0.0.1")
 DB_PORT = int(os.environ.get("EXTERNAL_DB_PORT", 3306))
-DB_NAME = os.environ.get("EXTERNAL_DB_NAME", "premium")
-DB_USER = os.environ.get("EXTERNAL_DB_USER", "premium")
+DB_NAME = os.environ.get("EXTERNAL_DB_NAME", "app")
+DB_USER = os.environ.get("EXTERNAL_DB_USER", "app")
 DB_PASSWORD = os.environ.get("EXTERNAL_DB_PASS", "Q3Y#ybA2X*2.nBr")
 
 def check_login(email, wachtwoord):
-    import time
     try:
-        print("Connecting to DB...")
-        t0 = time.time()
         conn = mysql.connector.connect(
             host=DB_HOST,
             port=DB_PORT,
@@ -35,12 +32,9 @@ def check_login(email, wachtwoord):
             password=DB_PASSWORD,
             connection_timeout=5  # seconds
         )
-        print("Connected in", time.time() - t0, "seconds")
         cursor = conn.cursor(dictionary=True)
-        print("Running user query...")
         cursor.execute("SELECT * FROM users WHERE email=%s LIMIT 1", (email,))
         user_row = cursor.fetchone()
-        print("Query result:", user_row)
         cursor.close()
         conn.close()
         if user_row and 'wachtwoord' in user_row:
@@ -49,18 +43,11 @@ def check_login(email, wachtwoord):
                 hash_for_bcrypt = hash_from_db.replace('$2y$', '$2b$')
                 try:
                     if bcrypt.checkpw(wachtwoord.encode('utf-8'), hash_for_bcrypt.encode('utf-8')):
-                        print("Password match!")
                         return user_row
-                    else:
-                        print("Password does not match.")
-                except ValueError as ve:
-                    print("ValueError in bcrypt:", ve)
+                except ValueError:
                     return None
-        else:
-            print("No user found or wachtwoord missing.")
         return None
     except Exception as e:
-        print(f"Database error: {e}")
         st.error(f"Database error: {e}")
         return None
 
