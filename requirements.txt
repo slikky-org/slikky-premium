@@ -3,3 +3,4 @@ python-dotenv
 openai
 reportlab
 mysql-connector-python
+bcrypt
