@@ -28,16 +28,15 @@ def check_login(email, wachtwoord):
         user=DB_USER, password=DB_PASSWORD
     )
     cursor = conn.cursor(dictionary=True)
-    # Query the encrypted password from the Gravity Forms compatible table
-    cursor.execute("SELECT encrypted_password FROM user_passwords WHERE email=%s ORDER BY created_at DESC LIMIT 1", (email,))
-    result = cursor.fetchone()
+    # Fetch the hash from the wachtwoord column in the users table
+    cursor.execute("SELECT * FROM users WHERE email=%s LIMIT 1", (email,))
+    user_row = cursor.fetchone()
     cursor.close()
     conn.close()
-    if result:
-        encrypted_password = result["encrypted_password"]
-        if bcrypt.checkpw(wachtwoord.encode("utf-8"), encrypted_password.encode("utf-8")):
-            # Optionally, fetch user info from another table if needed
-            return {"email": email, "rol": "premium"}  # Adjust as needed
+    if user_row and 'wachtwoord' in user_row:
+        hash_from_db = user_row['wachtwoord']
+        if bcrypt.checkpw(wachtwoord.encode('utf-8'), hash_from_db.encode('utf-8')):
+            return user_row
     return None
 
 # --- Streamlit login ---
